@@ -144,63 +144,69 @@
 (defmethod run-lisp ((lisp symbol) &rest args)
   (apply #'run-lisp (find-class lisp) args))
 
-(defgeneric evaluate-in-lisp (lisp file))
+(defgeneric evaluate-in-lisp (lisp input))
 
-(defmethod evaluate-in-lisp ((lisp class) file)
-  (evaluate-in-lisp (make-instance lisp) file))
+(defmethod evaluate-in-lisp ((lisp class) _)
+  (evaluate-in-lisp (make-instance lisp) _))
 
-(defmethod evaluate-in-lisp ((lisp symbol) file)
-  (evaluate-in-lisp (find-class lisp) file))
+(defmethod evaluate-in-lisp ((lisp symbol) _)
+  (evaluate-in-lisp (find-class lisp) _))
 
-(defmethod evaluate-in-lisp ((impls list) file)
+(defmethod evaluate-in-lisp ((impls list) _)
   (dolist (impl impls)
-    (evaluate-in-lisp impl file)))
+    (evaluate-in-lisp impl _)))
 
-(defmethod evaluate-in-lisp ((lisp (eql T)) file)
-  (evaluate-in-lisp (lisp-implementations) file))
+(defmethod evaluate-in-lisp ((lisp (eql T)) _)
+  (evaluate-in-lisp (lisp-implementations) _))
+
+(defmethod evaluate-in-lisp (lisp (string string))
+  (evaluate-in-lisp lisp (create-input-file :input string)))
+
+(defmethod evaluate-in-lisp (lisp (stream stream))
+  (evaluate-in-lisp lisp (create-input-file :input stream)))
 
 (defclass abcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp abcl) file)
+(defmethod evaluate-in-lisp ((lisp abcl) (file pathname))
   (run-lisp lisp "--noinform" "--noinit" "--load" (namestring file) "--eval" "(ext:quit)"))
 
 (defclass allegro (implementation)
   ((name :initform "Allegro")
    (executable :initform "alisp")))
 
-(defmethod evaluate-in-lisp ((lisp allegro) file)
+(defmethod evaluate-in-lisp ((lisp allegro) (file pathname))
   (run-lisp lisp "-L" (namestring file) "--kill"))
 
 (defclass ccl (implementation)
   ((executable :initform #+x86-64 "ccl64" #+x86 "ccl")))
 
-(defmethod evaluate-in-lisp ((lisp ccl) file)
+(defmethod evaluate-in-lisp ((lisp ccl) (file pathname))
   (run-lisp lisp "-n" "-Q" "-l" (namestring file) "-e" "(ccl:quit)"))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
 
-(defmethod evaluate-in-lisp ((lisp clisp) file)
+(defmethod evaluate-in-lisp ((lisp clisp) (file pathname))
   (run-lisp lisp "-q" "-q" "-ansi" "-norc" "-x" (format NIL "(progn (load ~s) (ext:quit 0))" (namestring file))))
 
 (defclass ecl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp ecl) file)
+(defmethod evaluate-in-lisp ((lisp ecl) (file pathname))
   (run-lisp lisp "--norc" "--shell" (namestring file)))
 
 (defclass cmucl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp cmucl) file)
+(defmethod evaluate-in-lisp ((lisp cmucl) (file pathname))
   (run-lisp lisp "-quiet" "-noinit" "-load" (namestring file) "-eval" "(unix:unix-exit 0)"))
 
 (defclass mkcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp mkcl) file)
+(defmethod evaluate-in-lisp ((lisp mkcl) (file pathname))
   (run-lisp lisp "-norc" "-q" "-load" (namestring file) "-eval" "(mk-ext:quit)"))
 
 (defclass sbcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp sbcl) file)
+(defmethod evaluate-in-lisp ((lisp sbcl) (file pathname))
   (run-lisp lisp "--script" (namestring file)))
 
 (defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
@@ -227,4 +233,5 @@
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
     (evaluate-in-lisp (or (nreverse impls) T)
-                      (create-input-file :input (or input *standard-input*) :print print))))
+                      (create-input-file :input (or input *standard-input*)
+                                         :print print))))
