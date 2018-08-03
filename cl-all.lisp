@@ -67,7 +67,8 @@
      (with-open-file (stream output :direction :output
                                     :element-type 'character
                                     :if-exists :supersede)
-       (create-input-file :input input :output stream :print print)))
+       (create-input-file :input input :output stream :print print)
+       (pathname output)))
     (stream
      (etypecase input
        (pathname
