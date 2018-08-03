@@ -1,3 +1,9 @@
+#|
+ This file is a part of cl-all
+ (c) 2018 Shirakumo http://tymoon.eu (shinmera@tymoon.eu)
+ Author: Nicolas Hafner <shinmera@tymoon.eu>
+|#
+
 (require 'sb-posix)
 (defpackage #:cl-all
   (:use #:cl)
@@ -120,7 +126,8 @@
   (local-executable (find-class lisp)))
 
 (defun lisp-implementations ()
-  (mapcar #'class-name (sb-mop:class-direct-subclasses (find-class 'implementation))))
+  (sort (mapcar #'class-name (sb-mop:class-direct-subclasses (find-class 'implementation)))
+        #'string<))
 
 (defun available-lisp-implementations ()
   (remove-if-not #'local-executable (lisp-implementations)))
@@ -196,7 +203,7 @@
 (defmethod evaluate-in-lisp ((lisp sbcl) file)
   (run-lisp lisp "--script" (namestring file)))
 
-(defun toplevel (args)
+(defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
   (let ((input NIL) (print NIL) (impls ()))
     (loop for arg = (pop args)
           while arg
@@ -209,8 +216,7 @@
                       (("-e" "--eval")
                        (setf input (format NIL "~@[~a~%~]~a" input (pop args))))
                       (("-l" "--lisps")
-                       (format *error-output* "~{~(~a~)~^ ~}~%"
-                               (sort (available-lisp-implementations) #'string<))
+                       (format *error-output* "~{~(~a~)~^ ~}~%" (available-lisp-implementations))
                        (return-from toplevel))
                       (("--")
                        (setf input (format NIL "~@[~a ~]~{~a~^ ~}" input args)))

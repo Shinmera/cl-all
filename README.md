@@ -2,7 +2,7 @@
 This is a simple script to run a snippet in several lisp implementations. Requires at least SBCL.
 
 ## How To
-After putting `cl-all` into your path somehow, either by augmenting `PATH` or symlinking it:
+You can either build a fixed SBCL binary with `make`, or symlink `cl-all.sh` to `cl-all`. Either way, once `cl-all` is in your path:
 
     cl-all '(print :hi)'
     cl-all sbcl ecl '(print "Oh man!")'
