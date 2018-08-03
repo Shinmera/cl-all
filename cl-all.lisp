@@ -15,7 +15,7 @@
    #:lisp-implementations
    #:available-lisp-implementations
    #:run-lisp
-   #:evaluate-in-lisp
+   #:eval-in-lisp
    #:abcl
    #:allegro
    #:ccl
@@ -103,8 +103,9 @@
                       :error *error-output*))
 
 (defun cl-user::ansi (stream code &rest arg)
-  (declare (ignore #-unix stream #-unix code arg))
-  #+unix (format stream "~c[~dm" #\escape code))
+  (declare (ignore arg))
+  (when (interactive-stream-p stream)
+    (format stream "~c[~dm" #\escape code)))
 
 (defclass implementation ()
   ((name :reader name)
@@ -117,17 +118,31 @@
   (unless (slot-boundp lisp 'executable)
     (setf (slot-value lisp 'executable) (string-downcase (name lisp)))))
 
+(defmethod ensure-lisp ((lisp implementation))
+  lisp)
+
+(defmethod ensure-lisp ((lisp class))
+  (make-instance lisp))
+
+(defmethod ensure-lisp ((lisp symbol))
+  (etypecase lisp
+    (keyword (ensure-lisp (find-symbol (string lisp) #.*package*)))
+    ((not null) (ensure-lisp (find-class lisp)))))
+
+(defmethod name (lisp)
+  (name (ensure-lisp lisp)))
+
+(defmethod executable (lisp)
+  (executable (ensure-lisp lisp)))
+
 (defmethod local-executable ((lisp implementation))
   (if (slot-boundp lisp 'local-executable)
       (slot-value lisp 'local-executable)
       (setf (slot-value lisp 'local-executable)
             (find-executable (executable lisp)))))
 
-(defmethod local-executable ((lisp class))
-  (local-executable (make-instance lisp)))
-
-(defmethod local-executable ((lisp symbol))
-  (local-executable (find-class lisp)))
+(defmethod local-executable (lisp)
+  (local-executable (ensure-lisp lisp)))
 
 (defun lisp-implementations ()
   (sort (mapcar #'class-name (sb-mop:class-direct-subclasses (find-class 'implementation)))
@@ -137,80 +152,71 @@
   (remove-if-not #'local-executable (lisp-implementations)))
 
 (defmethod run-lisp ((lisp implementation) &rest args)
-  (let ((executable (local-executable lisp)))
-    (when executable
-      (format *error-output* "~% ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/:~%" 33 0 1 (name lisp) 0)
-      (apply #'run executable args))))
+  (apply #'run (local-executable lisp) args))
 
-(defmethod run-lisp ((lisp class) &rest args)
-  (apply #'run-lisp (make-instance lisp) args))
+(defmethod run-lisp (lisp &rest args)
+  (apply #'run-lisp (ensure-lisp lisp) args))
 
-(defmethod run-lisp ((lisp symbol) &rest args)
-  (apply #'run-lisp (find-class lisp) args))
+(defgeneric eval-in-lisp (lisp input))
 
-(defgeneric evaluate-in-lisp (lisp input))
+(defmethod eval-in-lisp (lisp input)
+  (eval-in-lisp (ensure-lisp lisp) input))
 
-(defmethod evaluate-in-lisp ((lisp class) _)
-  (evaluate-in-lisp (make-instance lisp) _))
-
-(defmethod evaluate-in-lisp ((lisp symbol) _)
-  (evaluate-in-lisp (find-class lisp) _))
-
-(defmethod evaluate-in-lisp ((impls list) _)
+(defmethod eval-in-lisp ((impls list) _)
   (dolist (impl impls)
-    (evaluate-in-lisp impl _)))
+    (eval-in-lisp impl _)))
 
-(defmethod evaluate-in-lisp ((lisp (eql T)) _)
-  (evaluate-in-lisp (lisp-implementations) _))
+(defmethod eval-in-lisp ((lisp (eql T)) _)
+  (eval-in-lisp (lisp-implementations) _))
 
-(defmethod evaluate-in-lisp (lisp (string string))
-  (evaluate-in-lisp lisp (create-input-file :input string)))
+(defmethod eval-in-lisp (lisp (string string))
+  (eval-in-lisp lisp (create-input-file :input string)))
 
-(defmethod evaluate-in-lisp (lisp (stream stream))
-  (evaluate-in-lisp lisp (create-input-file :input stream)))
+(defmethod eval-in-lisp (lisp (stream stream))
+  (eval-in-lisp lisp (create-input-file :input stream)))
 
 (defclass abcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp abcl) (file pathname))
+(defmethod eval-in-lisp ((lisp abcl) (file pathname))
   (run-lisp lisp "--noinform" "--noinit" "--load" (namestring file) "--eval" "(ext:quit)"))
 
 (defclass allegro (implementation)
   ((name :initform "Allegro")
    (executable :initform "alisp")))
 
-(defmethod evaluate-in-lisp ((lisp allegro) (file pathname))
+(defmethod eval-in-lisp ((lisp allegro) (file pathname))
   (run-lisp lisp "-L" (namestring file) "--kill"))
 
 (defclass ccl (implementation)
   ((executable :initform #+x86-64 "ccl64" #+x86 "ccl")))
 
-(defmethod evaluate-in-lisp ((lisp ccl) (file pathname))
+(defmethod eval-in-lisp ((lisp ccl) (file pathname))
   (run-lisp lisp "-n" "-Q" "-l" (namestring file) "-e" "(ccl:quit)"))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
 
-(defmethod evaluate-in-lisp ((lisp clisp) (file pathname))
+(defmethod eval-in-lisp ((lisp clisp) (file pathname))
   (run-lisp lisp "-q" "-q" "-ansi" "-norc" "-x" (format NIL "(progn (load ~s) (ext:quit 0))" (namestring file))))
 
 (defclass cmucl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp cmucl) (file pathname))
+(defmethod eval-in-lisp ((lisp cmucl) (file pathname))
   (run-lisp lisp "-quiet" "-noinit" "-load" (namestring file) "-eval" "(unix:unix-exit 0)"))
 
 (defclass ecl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp ecl) (file pathname))
+(defmethod eval-in-lisp ((lisp ecl) (file pathname))
   (run-lisp lisp "--norc" "--shell" (namestring file)))
 
 (defclass mkcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp mkcl) (file pathname))
+(defmethod eval-in-lisp ((lisp mkcl) (file pathname))
   (run-lisp lisp "-norc" "-q" "-load" (namestring file) "-eval" "(mk-ext:quit)"))
 
 (defclass sbcl (implementation) ())
 
-(defmethod evaluate-in-lisp ((lisp sbcl) (file pathname))
+(defmethod eval-in-lisp ((lisp sbcl) (file pathname))
   (run-lisp lisp "--script" (namestring file)))
 
 (defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
@@ -236,6 +242,9 @@
                     (push (find-symbol (string-upcase arg)) impls))
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
-    (evaluate-in-lisp (or (nreverse impls) T)
-                      (create-input-file :input (or input *standard-input*)
-                                         :print print))))
+    (loop for impl in (or (nreverse impls) (available-lisp-implementations))
+          do (format *standard-output* "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~16t" 33 0 1 (name impl) 0)
+             (force-output *standard-output*)
+             (eval-in-lisp impl
+                           (create-input-file :input (or input *standard-input*)
+                                              :print print)))))
