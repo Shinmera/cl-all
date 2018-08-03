@@ -20,6 +20,7 @@
    #:allegro
    #:ccl
    #:clisp
+   #:cmucl
    #:ecl
    #:mkcl
    #:sbcl
@@ -88,11 +89,13 @@
   (loop for path in (split #+windows #\; #-windows #\: (sb-posix:getenv pathvar))
         collect (parse-namestring (format NIL "~a~c" path #+windows #\\ #-windows #\/))))
 
-(defun find-executable (name &optional (paths (executable-paths)))
-  (dolist (path paths)
-    (dolist (file (directory (make-pathname :name :wild :type :wild :defaults path)))
-      (when (string= (file-namestring file) name)
-        (return-from find-executable file)))))
+(defun find-executable (name &optional (directories (executable-paths)))
+  (let* ((path (pathname name))
+         (name (pathname-name path))
+         (type (pathname-type path)))
+    (loop for directory in directories
+          for path = (directory (make-pathname :name name :type type :defaults directory))
+          do (when path (return-from find-executable (first path))))))
 
 (defun run (executable &rest args)
   (sb-ext:run-program executable args
@@ -190,15 +193,15 @@
 (defmethod evaluate-in-lisp ((lisp clisp) (file pathname))
   (run-lisp lisp "-q" "-q" "-ansi" "-norc" "-x" (format NIL "(progn (load ~s) (ext:quit 0))" (namestring file))))
 
-(defclass ecl (implementation) ())
-
-(defmethod evaluate-in-lisp ((lisp ecl) (file pathname))
-  (run-lisp lisp "--norc" "--shell" (namestring file)))
-
 (defclass cmucl (implementation) ())
 
 (defmethod evaluate-in-lisp ((lisp cmucl) (file pathname))
   (run-lisp lisp "-quiet" "-noinit" "-load" (namestring file) "-eval" "(unix:unix-exit 0)"))
+
+(defclass ecl (implementation) ())
+
+(defmethod evaluate-in-lisp ((lisp ecl) (file pathname))
+  (run-lisp lisp "--norc" "--shell" (namestring file)))
 
 (defclass mkcl (implementation) ())
 
