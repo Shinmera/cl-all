@@ -80,7 +80,7 @@
         (let ((stream (make-string-input-stream input)))
           (create-input-file :input stream :output output :print print)))
        (stream
-        (when print (write-line "(print (progn" output))
+        (when print (write-line "(cl:format T \"~a\" (cl:progn" output))
         (copy-stream-to-stream input output)
         (when print (write-line "))" output))
         output)))))
@@ -243,8 +243,10 @@
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
     (loop for impl in (or (nreverse impls) (available-lisp-implementations))
-          do (format *standard-output* "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~16t" 33 0 1 (name impl) 0)
-             (force-output *standard-output*)
+          do (format T "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~vt" 33 0 1 (name impl) 0
+                     (if (interactive-stream-p *standard-output*) 34 16))
+             (force-output)
              (eval-in-lisp impl
                            (create-input-file :input (or input *standard-input*)
-                                              :print print)))))
+                                              :print print)))
+    (fresh-line)))

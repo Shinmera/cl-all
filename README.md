@@ -17,24 +17,16 @@ You can also load this system into your SBCL session and use it from the comfort
 ## Example Output
 
     $ cl-all --print call-arguments-limit
-     --> ABCL:  
-    50 
-     --> Allegro:  
-    16384 
-     --> CCL:  
-    65536 
+     --> ABCL:     50
+     --> Allegro:  16384
+     --> CCL:      65536
     
-     --> CLisp:  
-    4096 
+     --> CLisp:    4096
     
-     --> CMUCL:  
-    536870911 
-     --> ECL:  
-    65536 
-     --> MKCL:  
-    2305843009213693951 
-     --> SBCL:  
-    4611686018427387903 
+     --> CMUCL:    536870911
+     --> ECL:      65536
+     --> MKCL:     2305843009213693951
+     --> SBCL:     4611686018427387903
 
 ## CLI Reference
 
