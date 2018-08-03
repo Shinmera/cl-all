@@ -99,8 +99,8 @@
                       :error *error-output*))
 
 (defun cl-user::ansi (stream code &rest arg)
-  (declare (ignore arg))
-  (format stream "~c[~dm" #\escape code))
+  (declare (ignore #-unix stream #-unix code arg))
+  #+unix (format stream "~c[~dm" #\escape code))
 
 (defclass implementation ()
   ((name :reader name)
