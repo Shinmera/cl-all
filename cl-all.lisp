@@ -239,7 +239,7 @@
                       (T
                        (format *error-output* "~&Unknown argument ~s: Ignoring." arg))))
                    ((find arg (available-lisp-implementations) :test #'string-equal)
-                    (push (find-symbol (string-upcase arg)) impls))
+                    (push (find arg (available-lisp-implementations) :test #'string-equal) impls))
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
     (loop for impl in (or (nreverse impls) (available-lisp-implementations))
