@@ -188,7 +188,7 @@
   (run-lisp lisp "-L" (namestring file) "--kill"))
 
 (defclass ccl (implementation)
-  ((executable :initform #+x86-64 "ccl64" #+x86 "ccl")))
+  ((executable :initform "ccl")))
 
 (defmethod eval-in-lisp ((lisp ccl) (file pathname))
   (run-lisp lisp "-n" "-Q" "-l" (namestring file) "-e" "(ccl:quit)"))
