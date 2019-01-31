@@ -19,6 +19,7 @@
    #:abcl
    #:allegro
    #:ccl
+   #:clasp
    #:clisp
    #:cmucl
    #:ecl
@@ -192,6 +193,12 @@
 
 (defmethod eval-in-lisp ((lisp ccl) (file pathname))
   (run-lisp lisp "-n" "-Q" "-l" (namestring file) "-e" "(ccl:quit)"))
+
+(defclass clasp (implementation)
+  ((name :initform "Clasp")))
+
+(defmethod eval-in-lisp ((lisp clasp) (file pathname))
+  (run-lisp lisp "-N" "-r" "-e" (format NIL "(progn (load ~s) (si:quit 0))" (namestring file))))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
