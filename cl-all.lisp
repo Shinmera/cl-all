@@ -278,11 +278,15 @@
                     (push (find arg (available-lisp-implementations) :test #'string-equal) impls))
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
-    (loop for impl in (or (nreverse impls) (available-lisp-implementations))
+    (loop with input = (create-input-file :input (or input *standard-input*)
+                                          :print print)
+          for impl in (or (nreverse impls) (available-lisp-implementations))
           do (format T "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~vt" 33 0 1 (name impl) 0
                      (if (interactive-stream-p *standard-output*) 34 16))
              (force-output)
-             (eval-in-lisp impl
-                           (create-input-file :input (or input *standard-input*)
-                                              :print print)))
+             (handler-case
+                 (eval-in-lisp impl input)
+               (error (e)
+                 (format T "~& ~/ansi/[ERR]~/ansi/ ~vt~a" 31 0
+                         (if (interactive-stream-p *standard-output*) 34 16) e))))
     (fresh-line)))
