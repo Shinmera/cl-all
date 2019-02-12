@@ -90,13 +90,38 @@
   (loop for path in (split #+windows #\; #-windows #\: (sb-posix:getenv pathvar))
         collect (parse-namestring (format NIL "~a~c" path #+windows #\\ #-windows #\/))))
 
+(defun bytes= (array &rest test)
+  (loop for comp in test
+        for byte across array
+        always (= comp byte)))
+
+(defun executable-file-p (path)
+  (with-open-file (stream path :direction :input
+                               :element-type '(unsigned-byte 8)
+                               :if-does-not-exist NIL)
+    (when stream
+      (let ((bytes (make-array 4 :element-type '(unsigned-byte 8)
+                                 :initial-element 0)))
+        (read-sequence bytes stream)
+        (or ;; Windows Executable
+         (bytes= bytes #x4D #x5A)
+         ;; Windows Portable Executable
+         (bytes= bytes #x5A #x4D)
+         ;; ELF Executable
+         (bytes= bytes #x7F #x45 #x4C #x46)
+         ;; Mach-O Executable
+         (bytes= bytes #xFE #xED #xFA #xCE)
+         ;; Script with a shebang
+         #+unix (bytes= bytes #x23 #x21))))))
+
 (defun find-executable (name &optional (directories (executable-paths)))
   (let* ((path (pathname name))
          (name (pathname-name path))
          (type (pathname-type path)))
     (loop for directory in directories
           for path = (directory (make-pathname :name name :type type :defaults directory))
-          do (when path (return-from find-executable (first path))))))
+          do (when (and path (executable-file-p (first path)))
+               (return-from find-executable (first path))))))
 
 (defun run (executable &rest args)
   (sb-ext:run-program executable args
@@ -159,6 +184,10 @@
   (apply #'run-lisp (ensure-lisp lisp) args))
 
 (defgeneric eval-in-lisp (lisp input))
+
+(defmethod eval-in-lisp :around ((lisp implementation) input)
+  (with-simple-restart (abort "Don't run ~a" lisp)
+    (call-next-method)))
 
 (defmethod eval-in-lisp (lisp input)
   (eval-in-lisp (ensure-lisp lisp) input))
