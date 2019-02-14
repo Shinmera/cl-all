@@ -96,37 +96,44 @@
         always (= comp byte)))
 
 (defun executable-file-p (path)
-  (with-open-file (stream path :direction :input
-                               :element-type '(unsigned-byte 8)
-                               :if-does-not-exist NIL)
-    (when stream
-      (let ((bytes (make-array 4 :element-type '(unsigned-byte 8)
-                                 :initial-element 0)))
-        (read-sequence bytes stream)
-        (or ;; Windows Executable
-         (bytes= bytes #x4D #x5A)
-         ;; Windows Portable Executable
-         (bytes= bytes #x5A #x4D)
-         ;; ELF Executable
-         (bytes= bytes #x7F #x45 #x4C #x46)
-         ;; Mach-O Executable
-         (bytes= bytes #xFE #xED #xFA #xCE)
-         ;; Script with a shebang
-         #+unix (bytes= bytes #x23 #x21))))))
+  (when (or (pathname-name path)
+            (pathname-type path))
+    (with-open-file (stream path :direction :input
+                                 :element-type '(unsigned-byte 8)
+                                 :if-does-not-exist NIL)
+      (when stream
+        (let ((bytes (make-array 4 :element-type '(unsigned-byte 8)
+                                   :initial-element 0)))
+          (read-sequence bytes stream)
+          (or ;; Windows Executable
+           (bytes= bytes #x4D #x5A)
+           ;; Windows Portable Executable
+           (bytes= bytes #x5A #x4D)
+           ;; ELF Executable
+           (bytes= bytes #x7F #x45 #x4C #x46)
+           ;; Mach-O Executable
+           (bytes= bytes #xFE #xED #xFA #xCE)
+           ;; Script with a shebang
+           #+unix (bytes= bytes #x23 #x21)))))))
 
 (defun find-executable (name &optional (directories (executable-paths)))
-  (let* ((path (pathname name))
-         (name (pathname-name path))
-         (type (pathname-type path)))
-    (loop for directory in directories
-          for path = (directory (make-pathname :name name :type type :defaults directory))
-          do (when (and path (executable-file-p (first path)))
-               (return-from find-executable (first path))))))
+  (flet ((find-single (path)
+           (let* ((path (pathname path))
+                  (name (pathname-name path))
+                  (type (pathname-type path)))
+             (loop for directory in directories
+                   for path = (directory (make-pathname :name name :type type :defaults directory))
+                   do (when (and path (executable-file-p (first path)))
+                        (return-from find-executable (first path)))))))
+    (if (listp name)
+        (mapc #'find-single name)
+        (find-single name))))
 
 (defun run (executable &rest args)
   (sb-ext:run-program executable args
+                      :input NIL
                       :output *standard-output*
-                      :error *error-output*))
+                      :error *standard-output*))
 
 (defun cl-user::ansi (stream code &rest arg)
   (declare (ignore arg))
@@ -184,6 +191,8 @@
   (apply #'run-lisp (ensure-lisp lisp) args))
 
 (defgeneric eval-in-lisp (lisp input))
+(defgeneric eval-wrapper (lisp file))
+(defgeneric quit-form (lisp code))
 
 (defmethod eval-in-lisp :around ((lisp implementation) input)
   (with-simple-restart (abort "Don't run ~a" lisp)
@@ -205,55 +214,97 @@
 (defmethod eval-in-lisp (lisp (stream stream))
   (eval-in-lisp lisp (create-input-file :input stream)))
 
+(defmethod eval-wrapper (lisp file)
+  (format NIL "(flet ((finish () ~
+                        (finish-output *standard-output*) ~
+                        (finish-output *error-output*))) ~
+                 (handler-case ~
+                     (progn (load ~s) ~
+                       (finish) ~
+                       ~a) ~
+                   (error (e) ~
+                    (format *error-output* \"~&~%ERROR: ~~a\" e) ~
+                    (finish)
+                    ~a)))"
+          (namestring file) (quit-form lisp 0) (quit-form lisp 1)))
+
 (defclass abcl (implementation) ())
 
+(defmethod quit-form ((lisp abcl) code)
+  (format NIL "(ext:quit :status ~d)" code))
+
 (defmethod eval-in-lisp ((lisp abcl) (file pathname))
-  (run-lisp lisp "--noinform" "--noinit" "--load" (namestring file) "--eval" "(ext:quit)"))
+  (run-lisp lisp "--noinform" "--noinit" "--eval" (eval-wrapper lisp file)))
 
 (defclass allegro (implementation)
   ((name :initform "Allegro")
-   (executable :initform "alisp")))
+   (executable :initform '("alisp" "allegro"))))
+
+(defmethod quit-form ((lisp allegro) code)
+  (format NIL "(excl:exit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp allegro) (file pathname))
-  (run-lisp lisp "-L" (namestring file) "--kill"))
+  (run-lisp lisp "--qq" "-e" (eval-wrapper lisp file)))
 
 (defclass ccl (implementation)
-  ((executable :initform "ccl")))
+  ((executable :initform '("ccl64" "lx86cl64" "ccl" "lx86cl"))))
+
+(defmethod quit-form ((lisp ccl) code)
+  (format NIL "(ccl:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp ccl) (file pathname))
-  (run-lisp lisp "-n" "-Q" "-l" (namestring file) "-e" "(ccl:quit)"))
+  (run-lisp lisp "-n" "-Q" "-e" (eval-wrapper lisp file)))
 
 (defclass clasp (implementation)
   ((name :initform "Clasp")))
 
+(defmethod quit-form ((lisp clasp) code)
+  (format NIL "(si:quit ~d)" code))
+
 (defmethod eval-in-lisp ((lisp clasp) (file pathname))
-  (run-lisp lisp "-N" "-r" "-e" (format NIL "(progn (load ~s) (si:quit 0))" (namestring file))))
+  (run-lisp lisp "-N" "-r" "-e" (eval-wrapper lisp file)))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
 
+(defmethod quit-form ((lisp clisp) code)
+  (format NIL "(ext:quit ~d)" code))
+
 (defmethod eval-in-lisp ((lisp clisp) (file pathname))
-  (run-lisp lisp "-q" "-q" "-ansi" "-norc" "-x" (format NIL "(progn (load ~s) (ext:quit 0))" (namestring file))))
+  (run-lisp lisp "-q" "-q" "-ansi" "-norc" "-x" (eval-wrapper lisp file)))
 
 (defclass cmucl (implementation) ())
 
+(defmethod quit-form ((lisp cmucl) code)
+  (format NIL "(unix:unix-exit ~d)" code))
+
 (defmethod eval-in-lisp ((lisp cmucl) (file pathname))
-  (run-lisp lisp "-quiet" "-noinit" "-load" (namestring file) "-eval" "(unix:unix-exit 0)"))
+  (run-lisp lisp "-quiet" "-noinit" "-eval" (eval-wrapper lisp file)))
 
 (defclass ecl (implementation) ())
 
+(defmethod quit-form ((lisp ecl) code)
+  (format NIL "(si:quit ~d)" code))
+
 (defmethod eval-in-lisp ((lisp ecl) (file pathname))
-  (run-lisp lisp "--norc" "--shell" (namestring file)))
+  (run-lisp lisp "--norc" "--eval" (eval-wrapper lisp file)))
 
 (defclass mkcl (implementation) ())
 
+(defmethod quit-form ((lisp mkcl) code)
+  (format NIL "(mx-ext:quit :exit-code ~d)" code))
+
 (defmethod eval-in-lisp ((lisp mkcl) (file pathname))
-  (run-lisp lisp "-norc" "-q" "-load" (namestring file) "-eval" "(mk-ext:quit)"))
+  (run-lisp lisp "-norc" "-q" "-eval" (eval-wrapper lisp file)))
 
 (defclass sbcl (implementation) ())
 
+(defmethod quit-form ((lisp sbcl) code)
+  (format NIL "(sb-ext:exit :code ~d)" code))
+
 (defmethod eval-in-lisp ((lisp sbcl) (file pathname))
-  (run-lisp lisp "--script" (namestring file)))
+  (run-lisp lisp "--disable-ldb" "--lose-on-corruption" "--no-sysinit" "--no-userinit"
+            "--eval" (eval-wrapper lisp file)))
 
 (defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
   (let ((input NIL) (print NIL) (impls ()))
