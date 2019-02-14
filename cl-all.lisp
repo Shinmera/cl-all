@@ -263,7 +263,7 @@
   (format NIL "(si:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp clasp) (file pathname) with-rc)
-  (run-lisp lisp (unless with-rc "-N") "-r" "-e" (eval-wrapper lisp file)))
+  (run-lisp lisp (unless with-rc "-r") "-N" "-e" (eval-wrapper lisp file)))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
