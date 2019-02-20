@@ -127,7 +127,8 @@
                         (return-from find-executable (first path)))))))
     (if (listp name)
         (mapc #'find-single name)
-        (find-single name))))
+        (find-single name))
+    NIL))
 
 (defun run (executable &rest args)
   (sb-ext:run-program executable (remove NIL args)
