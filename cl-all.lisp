@@ -221,7 +221,7 @@
                         (finish-output *standard-output*) ~
                         (finish-output *error-output*))) ~
                  (handler-case ~
-                     (progn (load ~s) ~
+                     (progn (load ~s :verbose NIL :print NIL) ~
                        (finish) ~
                        ~a) ~
                    (error (e) ~
@@ -236,18 +236,22 @@
   (format NIL "(ext:quit :status ~d)" code))
 
 (defmethod eval-in-lisp ((lisp abcl) (file pathname) with-rc)
-  (run-lisp lisp "--noinform" (unless with-rc "--noinit") "--eval" (eval-wrapper lisp file)))
+  (run-lisp lisp "--noinform"
+            (unless with-rc "--noinit")
+            "--eval" (eval-wrapper lisp file)))
 
 (defclass allegro (implementation)
   ((name :initform "Allegro")
    (executable :initform '("alisp" "allegro"))))
 
 (defmethod quit-form ((lisp allegro) code)
-  (format NIL "(excl:exit ~d)" code))
+  (format NIL "(excl:exit ~d :quiet T)" code))
 
 (defmethod eval-in-lisp ((lisp allegro) (file pathname) with-rc)
   ;; FIXME: Allegro seems to run -e /before/ rc files are loaded.
-  (run-lisp lisp (unless with-rc "--qq") "-e" (eval-wrapper lisp file)))
+  (run-lisp lisp
+            (unless with-rc "--qq")
+            "-e" (eval-wrapper lisp file)))
 
 (defclass ccl (implementation)
   ((executable :initform '("ccl64" "lx86cl64" "ccl" "lx86cl"))))
@@ -256,7 +260,9 @@
   (format NIL "(ccl:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp ccl) (file pathname) with-rc)
-  (Run-lisp lisp (unless with-rc "-n") "-Q" "-e" (eval-wrapper lisp file)))
+  (Run-lisp lisp "-Q"
+            (unless with-rc "-n")
+            "-e" (eval-wrapper lisp file)))
 
 (defclass clasp (implementation)
   ((name :initform "Clasp")))
@@ -265,7 +271,9 @@
   (format NIL "(si:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp clasp) (file pathname) with-rc)
-  (run-lisp lisp (unless with-rc "-r") "-N" "-e" (eval-wrapper lisp file)))
+  (run-lisp lisp "-N"
+            (unless with-rc "-r")
+            "-e" (eval-wrapper lisp file)))
 
 (defclass clisp (implementation)
   ((name :initform "CLisp")))
@@ -274,7 +282,9 @@
   (format NIL "(ext:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp clisp) (file pathname) with-rc)
-  (run-lisp lisp "-q" "-q" "-ansi" (unless with-rc "-norc") "-x" (eval-wrapper lisp file)))
+  (run-lisp lisp "-q" "-q" "-ansi"
+            (unless with-rc "-norc")
+            "-x" (eval-wrapper lisp file)))
 
 (defclass cmucl (implementation)
   ((executable :initform '("lisp"))))
@@ -283,7 +293,9 @@
   (format NIL "(unix:unix-exit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp cmucl) (file pathname) with-rc)
-  (run-lisp lisp "-quiet" (unless with-rc "-noinit") "-eval" (eval-wrapper lisp file)))
+  (run-lisp lisp "-quiet"
+            (unless with-rc "-noinit")
+            "-eval" (eval-wrapper lisp file)))
 
 (defclass ecl (implementation) ())
 
@@ -291,7 +303,9 @@
   (format NIL "(si:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp ecl) (file pathname) with-rc)
-  (run-lisp lisp (unless with-rc "--norc") "--eval" (eval-wrapper lisp file)))
+  (run-lisp lisp "-q"
+            (unless with-rc "--norc")
+            "--eval" (eval-wrapper lisp file)))
 
 (defclass mkcl (implementation) ())
 
@@ -299,7 +313,9 @@
   (format NIL "(mx-ext:quit :exit-code ~d)" code))
 
 (defmethod eval-in-lisp ((lisp mkcl) (file pathname) with-rc)
-  (run-lisp lisp (unless with-rc "-norc") "-q" "-eval" (eval-wrapper lisp file)))
+  (run-lisp lisp "-q"
+            (unless with-rc "-norc")
+            "-eval" (eval-wrapper lisp file)))
 
 (defclass sbcl (implementation) ())
 
@@ -307,7 +323,9 @@
   (format NIL "(sb-ext:exit :code ~d)" code))
 
 (defmethod eval-in-lisp ((lisp sbcl) (file pathname) with-rc)
-  (run-lisp lisp "--disable-ldb" "--lose-on-corruption" "--noinform"
+  (run-lisp lisp "--disable-ldb"
+            "--noinform"
+            "--lose-on-corruption"
             (unless with-rc "--no-sysinit")
             (unless with-rc "--no-userinit")
             "--eval" (eval-wrapper lisp file)))
