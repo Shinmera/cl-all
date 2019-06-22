@@ -6,7 +6,7 @@
 
 (asdf:defsystem cl-all
   :version "1.0.0"
-  :license "Artistic"
+  :license "zlib"
   :author "Nicolas Hafner <shinmera@tymoon.eu>"
   :maintainer "Nicolas Hafner <shinmera@tymoon.eu>"
   :description "A script to evaluate expressions in multiple lisp implementations."
