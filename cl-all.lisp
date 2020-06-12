@@ -288,7 +288,7 @@
             "-x" (eval-wrapper lisp file)))
 
 (defclass cmucl (implementation)
-  ((executable :initform '("lisp"))))
+  ((executable :initform '("cmucl" "lisp"))))
 
 (defmethod quit-form ((lisp cmucl) code)
   (format NIL "(unix:unix-exit ~d)" code))
