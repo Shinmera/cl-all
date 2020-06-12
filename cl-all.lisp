@@ -276,7 +276,8 @@
 (defmethod eval-in-lisp ((lisp clisp) (file pathname) with-rc)
   (run-lisp lisp "-q" "-q" "-ansi" (unless with-rc "-norc") "-x" (eval-wrapper lisp file)))
 
-(defclass cmucl (implementation) ())
+(defclass cmucl (implementation)
+  ((executable :initform '("lisp"))))
 
 (defmethod quit-form ((lisp cmucl) code)
   (format NIL "(unix:unix-exit ~d)" code))
