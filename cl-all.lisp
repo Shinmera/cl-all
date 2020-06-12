@@ -306,7 +306,7 @@
   (format NIL "(sb-ext:exit :code ~d)" code))
 
 (defmethod eval-in-lisp ((lisp sbcl) (file pathname) with-rc)
-  (run-lisp lisp "--disable-ldb" "--lose-on-corruption"
+  (run-lisp lisp "--disable-ldb" "--lose-on-corruption" "--noinform"
             (unless with-rc "--no-sysinit")
             (unless with-rc "--no-userinit")
             "--eval" (eval-wrapper lisp file)))
