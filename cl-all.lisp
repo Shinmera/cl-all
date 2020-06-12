@@ -23,6 +23,7 @@
    #:clisp
    #:cmucl
    #:ecl
+   #:jscl
    #:mkcl
    #:sbcl
    #:toplevel))
@@ -305,6 +306,16 @@
 (defmethod eval-in-lisp ((lisp ecl) (file pathname) with-rc)
   (run-lisp lisp "-q"
             (unless with-rc "--norc")
+            "--eval" (eval-wrapper lisp file)))
+
+(defclass jscl (implementation) ()
+  ((executable :initform '("jscl" "jscl-repl"))))
+
+(defmethod quit-form ((lisp jscl) code)
+  (format NIL "(#j:process:exit ~d)" code))
+
+(defmethod eval-in-lisp ((lisp jscl) (file pathname) with-rc)
+  (run-lisp lisp "--quiet"
             "--eval" (eval-wrapper lisp file)))
 
 (defclass mkcl (implementation) ())
