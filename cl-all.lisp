@@ -112,7 +112,8 @@
            ;; ELF Executable
            (bytes= bytes #x7F #x45 #x4C #x46)
            ;; Mach-O Executable
-           (bytes= bytes #xFE #xED #xFA #xCE)
+           (or (bytes= bytes #xCE #xFA #xED #xFE)  ;; Mach-O Executable i386
+               (bytes= bytes #xCF #xFA #xED #xFE)) ;; Mach-O Executable x86_64
            ;; Script with a shebang
            #+unix (bytes= bytes #x23 #x21)))))))
 
