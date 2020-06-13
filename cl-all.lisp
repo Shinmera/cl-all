@@ -308,7 +308,7 @@
             (unless with-rc "--norc")
             "--eval" (eval-wrapper lisp file)))
 
-(defclass jscl (implementation) ()
+(defclass jscl (implementation)
   ((executable :initform '("jscl" "jscl-repl"))))
 
 (defmethod quit-form ((lisp jscl) code)
