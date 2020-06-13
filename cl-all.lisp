@@ -249,9 +249,9 @@
   (format NIL "(excl:exit ~d :quiet T)" code))
 
 (defmethod eval-in-lisp ((lisp allegro) (file pathname) with-rc)
-  ;; FIXME: Allegro seems to run -e /before/ rc files are loaded.
   (run-lisp lisp
             (unless with-rc "--qq")
+            "-e" "(mapcar #'(lambda (filename) (let ((init-file (merge-pathnames filename (user-homedir-pathname)))) (when (probe-file init-file) (load init-file)))) (list \".clinit.cl\" \"clinit.cl\"))"
             "-e" (eval-wrapper lisp file)))
 
 (defclass ccl (implementation)
