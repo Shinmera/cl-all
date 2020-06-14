@@ -252,7 +252,7 @@
   (run-lisp lisp
             (unless with-rc "--qq")
             (when with-rc "-e")
-            (when with-rc "(mapcar #'(lambda (filename) (let ((init-file (merge-pathnames filename (user-homedir-pathname)))) (when (probe-file init-file) (load init-file)))) (list \".clinit.cl\" \"clinit.cl\"))")
+            (when with-rc "(mapcar #'(lambda (init-file) (when (probe-file init-file) (load init-file))) (remove-duplicates (list (translate-logical-pathname \"sys:siteinit.cl\") (merge-pathnames \".clinit.cl\" (user-homedir-pathname)) (merge-pathnames \"clinit.cl\" (user-homedir-pathname)) (merge-pathnames \".clinit.cl\" *default-pathname-defaults*) (merge-pathnames \"clinit.cl\" *default-pathname-defaults*)) :test #'equal))")
             "-e" (eval-wrapper lisp file)))
 
 (defclass ccl (implementation)
