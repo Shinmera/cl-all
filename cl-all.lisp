@@ -56,7 +56,8 @@
       (nreverse parts))))
 
 (defun temp-file ()
-  #p"/tmp/cl-all.lisp")
+  #+windows (merge-pathnames "AppData/Local/Temp/" (user-homedir-pathname))
+  #-windows #p"/tmp/cl-all.lisp")
 
 (defun copy-stream-to-stream (input output)
   (let ((buffer (make-string 4096)))
