@@ -2,7 +2,7 @@
 This is a simple script to run a Lisp snippet in locally installed lisp implementations. Requires at least SBCL.
 
 ## How To
-You can either build a fixed SBCL binary with ``make``, or symlink ``cl-all.sh`` to ``cl-all``. Either way, once ``cl-all`` is in your path:
+You can either build a fixed SBCL binary with ``make``, or symlink ``cl-all.lisp`` to ``cl-all``. Either way, once ``cl-all`` is in your path:
 
 ::
 cl-all '(print :hi)'

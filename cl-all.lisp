@@ -1,7 +1,5 @@
 #|
- This file is a part of cl-all
- (c) 2018 Shirakumo http://tymoon.eu (shinmera@tymoon.eu)
- Author: Nicolas Hafner <shinmera@tymoon.eu>
+exec sbcl --noinform --no-userinit --load "$0" --eval "(cl-all:toplevel)" --quit --end-toplevel-options "$@"
 |#
 
 (require 'sb-posix)
@@ -195,7 +193,7 @@
   (apply #'run-lisp (ensure-lisp lisp) args))
 
 (defgeneric eval-in-lisp (lisp input with-rc))
-(defgeneric eval-wrapper (lisp file))
+(defgeneric eval-wrapper (lisp file &optional destination))
 (defgeneric quit-form (lisp code))
 
 (defmethod eval-in-lisp :around ((lisp implementation) _ __)
@@ -218,8 +216,8 @@
 (defmethod eval-in-lisp (lisp (stream stream) _)
   (eval-in-lisp lisp (create-input-file :input stream) _))
 
-(defmethod eval-wrapper (lisp file)
-  (format NIL "(flet ((finish () ~
+(defmethod eval-wrapper (lisp file &optional destination)
+  (format destination "(flet ((finish () ~
                         (finish-output *standard-output*) ~
                         (finish-output *error-output*))) ~
                  (handler-case ~
@@ -317,8 +315,15 @@
   (format NIL "(#j:process:exit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp jscl) (file pathname) with-rc)
-  (run-lisp lisp "--quiet"
-            "--eval" (eval-wrapper lisp file)))
+  (let ((tmp (make-pathname :name "cl-all-tmp" :type "lisp" :defaults
+                            #+(or windows win32) #p"C:/Temp/"
+                            #-(or windows win32) #p"/tmp/")))
+    (unwind-protect
+         (progn
+           (with-open-file (stream tmp :direction :output :if-exists :supersede)
+             (eval-wrapper lisp file stream))
+           (run-lisp lisp (namestring tmp)))
+      (delete-file tmp))))
 
 (defclass mkcl (implementation) ())
 
