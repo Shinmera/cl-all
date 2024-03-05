@@ -147,7 +147,7 @@ exec sbcl \
                       :output *run-output*
                       :error *run-output*))
 
-(defun cl-user::ansi (stream code &rest arg)
+(defun ansi (stream code &rest arg)
   (declare (ignore arg))
   (when (interactive-stream-p stream)
     (format stream "~c[~dm" #\escape code)))
@@ -425,7 +425,8 @@ cl-all (implementation | option | snippet)*
     (loop with input = (create-input-file :input (or input *standard-input*)
                                           :print print)
           for impl in (or (nreverse impls) (available-lisp-implementations))
-          do (format T "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~vt" 33 0 1 (name impl) 0
+          do (format T "~& ~/cl-all::ansi/-->~/cl-all::ansi/ ~/cl-all::ansi/~a~/cl-all::ansi/: ~vt"
+                     33 0 1 (name impl) 0
                      (if (interactive-stream-p *standard-output*) 34 16))
              (force-output)
              (handler-case
@@ -435,6 +436,6 @@ cl-all (implementation | option | snippet)*
                        (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
                      (eval-in-lisp impl input with-rc))
                (error (e)
-                 (format T "~& ~/ansi/[ERR]~/ansi/ ~vt~a" 31 0
+                 (format T "~& ~/cl-all::ansi/[ERR]~/cl-all::ansi/ ~vt~a" 31 0
                          (if (interactive-stream-p *standard-output*) 34 16) e))))
     (fresh-line)))
