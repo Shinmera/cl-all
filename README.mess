@@ -67,6 +67,7 @@ cl-all (implementation | option | snippet)*
 - Clisp
 - CMUCL
 - ECL
+- GCL
 - JSCL
 - MKCL
 - SBCL

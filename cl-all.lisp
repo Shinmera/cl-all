@@ -28,6 +28,7 @@ exec sbcl \
    #:clisp
    #:cmucl
    #:ecl
+   #:gcl
    #:jscl
    #:mkcl
    #:sbcl
@@ -316,6 +317,14 @@ exec sbcl \
   (run-lisp lisp "-q"
             (unless with-rc "--norc")
             "--eval" (eval-wrapper lisp file)))
+
+(defclass gcl (implementation) ())
+
+(defmethod quit-form ((lisp gcl) code)
+  (format NIL "(bye ~d)" code))
+
+(defmethod eval-in-lisp ((lisp gcl) (file pathname) _)
+  (run-lisp lisp "-eval" (eval-wrapper lisp file)))
 
 (defclass jscl (implementation)
   ((executable :initform '("jscl" "jscl-repl"))))
