@@ -282,7 +282,7 @@ exec sbcl \
   (format NIL "(si:quit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp clasp) (file pathname) with-rc)
-  (run-lisp lisp "-N"
+  (run-lisp lisp "--noinform" "-N"
             (unless with-rc "-r")
             "-e" (eval-wrapper lisp file)))
 
