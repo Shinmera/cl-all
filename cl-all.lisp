@@ -286,7 +286,7 @@ exec sbcl \
             "-e" (eval-wrapper lisp file)))
 
 (defclass clisp (implementation)
-  ((name :initform "CLisp")))
+  ((name :initform "CLISP")))
 
 (defmethod quit-form ((lisp clisp) code)
   (format NIL "(ext:quit ~d)" code))
