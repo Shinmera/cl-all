@@ -1,5 +1,12 @@
 #|
-exec sbcl --noinform --no-userinit --load "$0" --eval "(cl-all:toplevel)" --quit --end-toplevel-options "$@"
+exec sbcl \
+  --noinform \
+  --no-userinit \
+  --disable-debugger \
+  --load "$0" \
+  --eval "(cl-all:toplevel)" \
+  --quit \
+  --end-toplevel-options "$@"
 |#
 
 (require 'sb-posix)
@@ -26,6 +33,8 @@ exec sbcl --noinform --no-userinit --load "$0" --eval "(cl-all:toplevel)" --quit
    #:sbcl
    #:toplevel))
 (in-package #:cl-all)
+
+(defvar *run-output* *standard-output*)
 
 (defun starts-with (prefix string)
   (and (<= (length prefix) (length string))
@@ -134,8 +143,8 @@ exec sbcl --noinform --no-userinit --load "$0" --eval "(cl-all:toplevel)" --quit
 (defun run (executable &rest args)
   (sb-ext:run-program executable (remove NIL args)
                       :input NIL
-                      :output *standard-output*
-                      :error *standard-output*))
+                      :output *run-output*
+                      :error *run-output*))
 
 (defun cl-user::ansi (stream code &rest arg)
   (declare (ignore arg))
@@ -359,7 +368,8 @@ cl-all (implementation | option | snippet)*
     are used. See -l for a list of available implementations.
   
   option:
-    --print -p   Causes the last form's value to be printed.
+    --print -p   Causes the last form's value to be printed. Will also
+                 trim extraneous whitespace from the output.
     --file  -f   Uses the given file as input.
     --eval  -e   Evaluates the given expression.
     --no-rc -n   Do not run implementation init files.
@@ -410,7 +420,11 @@ cl-all (implementation | option | snippet)*
                      (if (interactive-stream-p *standard-output*) 34 16))
              (force-output)
              (handler-case
-                 (eval-in-lisp impl input with-rc)
+                 (if print
+                     (let ((str (with-output-to-string (*run-output*)
+                                  (eval-in-lisp impl input with-rc))))
+                       (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
+                     (eval-in-lisp impl input with-rc))
                (error (e)
                  (format T "~& ~/ansi/[ERR]~/ansi/ ~vt~a" 31 0
                          (if (interactive-stream-p *standard-output*) 34 16) e))))
