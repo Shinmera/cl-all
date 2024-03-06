@@ -202,29 +202,29 @@ exec sbcl \
 (defmethod run-lisp (lisp &rest args)
   (apply #'run-lisp (ensure-lisp lisp) args))
 
-(defgeneric eval-in-lisp (lisp input with-rc))
+(defgeneric eval-in-lisp (lisp input &key &allow-other-keys))
 (defgeneric eval-wrapper (lisp file &optional destination))
 (defgeneric quit-form (lisp code))
 
-(defmethod eval-in-lisp :around ((lisp implementation) _ __)
+(defmethod eval-in-lisp :around ((lisp implementation) _ &key)
   (with-simple-restart (abort "Don't run ~a" lisp)
     (call-next-method)))
 
-(defmethod eval-in-lisp (lisp _ __)
-  (eval-in-lisp (ensure-lisp lisp) _ __))
+(defmethod eval-in-lisp (lisp _ &rest args &key)
+  (apply #'eval-in-lisp (ensure-lisp lisp) _ args))
 
-(defmethod eval-in-lisp ((impls list) _ __)
+(defmethod eval-in-lisp ((impls list) _ &rest args &key)
   (dolist (impl impls)
-    (eval-in-lisp impl _ __)))
+    (apply #'eval-in-lisp impl _ args)))
 
-(defmethod eval-in-lisp ((lisp (eql T)) _ __)
-  (eval-in-lisp (lisp-implementations) _ __))
+(defmethod eval-in-lisp ((lisp (eql T)) _ &rest args &key)
+  (apply #'eval-in-lisp (lisp-implementations) _ args))
 
-(defmethod eval-in-lisp (lisp (string string) _)
-  (eval-in-lisp lisp (create-input-file :input string) _))
+(defmethod eval-in-lisp (lisp (string string) &rest args &key)
+  (apply #'eval-in-lisp lisp (create-input-file :input string) args))
 
-(defmethod eval-in-lisp (lisp (stream stream) _)
-  (eval-in-lisp lisp (create-input-file :input stream) _))
+(defmethod eval-in-lisp (lisp (stream stream) &rest args &key)
+  (apply #'eval-in-lisp lisp (create-input-file :input stream) args))
 
 (defmethod eval-wrapper (lisp file &optional destination)
   (format destination "(flet ((finish () ~
@@ -245,7 +245,7 @@ exec sbcl \
 (defmethod quit-form ((lisp abcl) code)
   (format NIL "(ext:quit :status ~d)" code))
 
-(defmethod eval-in-lisp ((lisp abcl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp abcl) (file pathname) &key with-rc)
   (run-lisp lisp "--noinform"
             (unless with-rc "--noinit")
             "--eval" (eval-wrapper lisp file)))
@@ -257,7 +257,7 @@ exec sbcl \
 (defmethod quit-form ((lisp allegro) code)
   (format NIL "(excl:exit ~d :quiet T)" code))
 
-(defmethod eval-in-lisp ((lisp allegro) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp allegro) (file pathname) &key with-rc)
   (run-lisp lisp
             (unless with-rc "--qq")
             (when with-rc "-e")
@@ -270,7 +270,7 @@ exec sbcl \
 (defmethod quit-form ((lisp ccl) code)
   (format NIL "(ccl:quit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp ccl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp ccl) (file pathname) &key with-rc)
   (Run-lisp lisp "-Q"
             (unless with-rc "-n")
             "-e" (eval-wrapper lisp file)))
@@ -281,7 +281,7 @@ exec sbcl \
 (defmethod quit-form ((lisp clasp) code)
   (format NIL "(si:quit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp clasp) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp clasp) (file pathname) &key with-rc)
   (run-lisp lisp "--noinform" "-N"
             (unless with-rc "-r")
             "-e" (eval-wrapper lisp file)))
@@ -292,7 +292,7 @@ exec sbcl \
 (defmethod quit-form ((lisp clisp) code)
   (format NIL "(ext:quit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp clisp) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp clisp) (file pathname) &key with-rc)
   (run-lisp lisp "-q" "-q" "-ansi"
             (unless with-rc "-norc")
             "-x" (eval-wrapper lisp file)))
@@ -303,7 +303,7 @@ exec sbcl \
 (defmethod quit-form ((lisp cmucl) code)
   (format NIL "(unix:unix-exit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp cmucl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp cmucl) (file pathname) &key with-rc)
   (run-lisp lisp "-quiet"
             (unless with-rc "-noinit")
             "-eval" (eval-wrapper lisp file)))
@@ -313,7 +313,7 @@ exec sbcl \
 (defmethod quit-form ((lisp ecl) code)
   (format NIL "(si:quit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp ecl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp ecl) (file pathname) &key with-rc)
   (run-lisp lisp "-q"
             (unless with-rc "--norc")
             "--eval" (eval-wrapper lisp file)))
@@ -323,7 +323,7 @@ exec sbcl \
 (defmethod quit-form ((lisp gcl) code)
   (format NIL "(bye ~d)" code))
 
-(defmethod eval-in-lisp ((lisp gcl) (file pathname) _)
+(defmethod eval-in-lisp ((lisp gcl) (file pathname) &key)
   (run-lisp lisp "-eval" (eval-wrapper lisp file)))
 
 (defclass jscl (implementation)
@@ -332,7 +332,7 @@ exec sbcl \
 (defmethod quit-form ((lisp jscl) code)
   (format NIL "(#j:process:exit ~d)" code))
 
-(defmethod eval-in-lisp ((lisp jscl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp jscl) (file pathname) &key)
   (let ((tmp (make-pathname :name "cl-all-tmp" :type "lisp" :defaults
                             #+(or windows win32) #p"C:/Temp/"
                             #-(or windows win32) #p"/tmp/")))
@@ -348,7 +348,7 @@ exec sbcl \
 (defmethod quit-form ((lisp mkcl) code)
   (format NIL "(mx-ext:quit :exit-code ~d)" code))
 
-(defmethod eval-in-lisp ((lisp mkcl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp mkcl) (file pathname) &key with-rc)
   (run-lisp lisp "-q"
             (unless with-rc "-norc")
             "-eval" (eval-wrapper lisp file)))
@@ -358,7 +358,7 @@ exec sbcl \
 (defmethod quit-form ((lisp sbcl) code)
   (format NIL "(sb-ext:exit :code ~d)" code))
 
-(defmethod eval-in-lisp ((lisp sbcl) (file pathname) with-rc)
+(defmethod eval-in-lisp ((lisp sbcl) (file pathname) &key with-rc)
   (run-lisp lisp "--disable-ldb"
             "--noinform"
             "--lose-on-corruption"
@@ -431,9 +431,9 @@ cl-all (implementation | option | snippet)*
              (handler-case
                  (if print
                      (let ((str (with-output-to-string (*run-output*)
-                                  (eval-in-lisp impl input with-rc))))
+                                  (eval-in-lisp impl input :with-rc with-rc))))
                        (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
-                     (eval-in-lisp impl input with-rc))
+                     (eval-in-lisp impl input :with-rc with-rc))
                (error (e)
                  (format T "~& ~/ansi/[ERR]~/ansi/ ~vt~a" 31 0
                          (if (interactive-stream-p *standard-output*) 34 16) e))))
