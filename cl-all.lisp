@@ -197,8 +197,11 @@ exec sbcl \
   (sort (mapcar #'class-name (sb-mop:class-direct-subclasses (find-class 'implementation)))
         #'string<))
 
-(defun available-lisp-implementations ()
-  (remove-if-not #'local-executable (lisp-implementations)))
+(defvar *available-lisp-implementations* ())
+(defun available-lisp-implementations (&key force)
+  (when (or force (null *available-lisp-implementations*))
+    (setf *available-lisp-implementations* (remove-if-not #'local-executable (lisp-implementations))))
+  *available-lisp-implementations*)
 
 (defmethod run-lisp ((lisp implementation) &rest args)
   (apply #'run (local-executable lisp) args))
