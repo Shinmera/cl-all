@@ -438,8 +438,11 @@ cl-all (implementation | option | snippet)*
                        (return-from toplevel))
                       (T
                        (format *error-output* "~&Unknown argument ~s: Ignoring." arg))))
-                   ((find arg (available-lisp-implementations) :test #'string-equal)
-                    (push (find arg (available-lisp-implementations) :test #'string-equal) impls))
+                   ((find arg (lisp-implementations) :test #'string-equal)
+                    (let ((impl (find arg (lisp-implementations) :test #'string-equal)))
+                      (unless (local-executable impl)
+                        (error "Cannot run on ~a: can't find its executable locally!" arg))
+                      (push impl impls)))
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
     (loop with input = (create-input-file :input (or input *standard-input*)
