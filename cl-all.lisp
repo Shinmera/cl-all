@@ -73,23 +73,23 @@ exec sbcl \
           while (< 0 read)
           do (write-sequence buffer output :end read))))
 
-(defun create-input-file (&key (input *standard-input*) (output (temp-file)) print disassemble)
+(defun create-input-file (&rest args &key (input *standard-input*) (output (temp-file)) print disassemble)
   (etypecase output
     ((or pathname string)
      (with-open-file (stream output :direction :output
                                     :element-type 'character
                                     :if-exists :supersede)
-       (create-input-file :input input :output stream :print print)
+       (apply #'create-input-file :output stream args)
        (pathname output)))
     (stream
      (etypecase input
        (pathname
         (with-open-file (stream input :direction :input
                                       :element-type 'character)
-          (create-input-file :input stream :output output :print print)))
+          (apply #'create-input-file :input stream args)))
        (string
         (let ((stream (make-string-input-stream input)))
-          (create-input-file :input stream :output output :print print)))
+          (apply #'create-input-file :input stream args)))
        (stream
         (format output "~&(cl:defun cl-user::cl-all-thunk ()~%")
         (copy-stream-to-stream input output)
@@ -97,7 +97,7 @@ exec sbcl \
         (when print
           (format output "~&(cl:format cl:t \"~~a\" (cl-user::cl-all-thunk))~%"))
         (when disassemble
-          (write-line "~&(cl:disassemble (cl:compile 'cl-user::cl-all-thunk))~%" output))
+          (format output "~&(cl:disassemble (cl:compile 'cl-user::cl-all-thunk))~%"))
         output)))))
 
 (defun executable-paths (&optional (pathvar "PATH"))
@@ -456,6 +456,8 @@ cl-all (implementation | option | snippet)*
                  (if (or print disassemble)
                      (let ((str (with-output-to-string (*run-output*)
                                   (eval-in-lisp impl input :with-rc with-rc))))
+                       (when (and disassemble (not print))
+                         (terpri))
                        (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
                      (eval-in-lisp impl input :with-rc with-rc))
                (error (e)
