@@ -24,9 +24,7 @@ $ cl-all --print call-arguments-limit
  --> ABCL:     50
  --> Allegro:  16384
  --> CCL:      65536
-
  --> CLisp:    4096
-
  --> CMUCL:    536870911
  --> ECL:      65536
  --> MKCL:     2305843009213693951
@@ -43,20 +41,32 @@ cl-all (implementation | option | snippet)*
     are used. See -l for a list of available implementations.
   
   option:
-    --print -p   Causes the last form's value to be printed.
-    --file  -f   Uses the given file as input.
-    --eval  -e   Evaluates the given expression.
-    --no-rc -n   Do not run implementation init files.
-    --lisps -l   Lists all known and available implementations and exit.
-    --help  -h   Show this usage prompt and exit.
-    --           All further arguments are used as tokens to be evaluated,
-                 concatenated by spaces.
+    --print -p         Causes the last form's value to be printed.
+                       Will also trim extraneous whitespace from the
+                       output.
+
+    --file  -f         Uses the given file as input.
+
+    --eval  -e         Evaluates the given expression.
+
+    --disassemble -d   Compiles and prints the disassembly of the
+                       expressions.
+
+    --no-rc -n         Do not run implementation init files.
+
+    --lisps -l         List all known and available implementations
+                       and exit.
+
+    --help  -h         Show this usage prompt and exit.
+
+    --                 All further arguments are used as tokens to be
+                       evaluated, concatenated by spaces.
   
   snippet:
     A lisp snippet to be evaluated.
   
   If no snippet, file, or eval option is given, the standard input is
-  used to read forms from. Forms are read until EOF is encountered (C-d).
+  used to read forms from. Forms are read until EOF is encountered
 ::
 
 ## Known Implementations

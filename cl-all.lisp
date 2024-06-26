@@ -73,7 +73,7 @@ exec sbcl \
           while (< 0 read)
           do (write-sequence buffer output :end read))))
 
-(defun create-input-file (&key (input *standard-input*) (output (temp-file)) print)
+(defun create-input-file (&key (input *standard-input*) (output (temp-file)) print disassemble)
   (etypecase output
     ((or pathname string)
      (with-open-file (stream output :direction :output
@@ -91,9 +91,13 @@ exec sbcl \
         (let ((stream (make-string-input-stream input)))
           (create-input-file :input stream :output output :print print)))
        (stream
-        (when print (write-line "(cl:format T \"~a\" (cl:progn" output))
+        (format output "~&(cl:defun cl-user::cl-all-thunk ()~%")
         (copy-stream-to-stream input output)
-        (when print (write-line "))" output))
+        (format output ")~%")
+        (when print
+          (format output "~&(cl:format cl:t \"~~a\" (cl-user::cl-all-thunk))~%"))
+        (when disassemble
+          (write-line "~&(cl:disassemble (cl:compile 'cl-user::cl-all-thunk))~%" output))
         output)))))
 
 (defun executable-paths (&optional (pathvar "PATH"))
@@ -377,24 +381,35 @@ cl-all (implementation | option | snippet)*
     are used. See -l for a list of available implementations.
   
   option:
-    --print -p   Causes the last form's value to be printed. Will also
-                 trim extraneous whitespace from the output.
-    --file  -f   Uses the given file as input.
-    --eval  -e   Evaluates the given expression.
-    --no-rc -n   Do not run implementation init files.
-    --lisps -l   Lists all known and available implementations and exit.
-    --help  -h   Show this usage prompt and exit.
-    --           All further arguments are used as tokens to be evaluated,
-                 concatenated by spaces.
+    --print -p         Causes the last form's value to be printed.
+                       Will also trim extraneous whitespace from the
+                       output.
+
+    --file  -f         Uses the given file as input.
+
+    --eval  -e         Evaluates the given expression.
+
+    --disassemble -d   Compiles and prints the disassembly of the
+                       expressions.
+
+    --no-rc -n         Do not run implementation init files.
+
+    --lisps -l         List all known and available implementations
+                       and exit.
+
+    --help  -h         Show this usage prompt and exit.
+
+    --                 All further arguments are used as tokens to be
+                       evaluated, concatenated by spaces.
   
   snippet:
     A lisp snippet to be evaluated.
   
   If no snippet, file, or eval option is given, the standard input is
-  used to read forms from. Forms are read until EOF is encountered (C-d).~%")
+  used to read forms from. Forms are read until EOF is encountered~%")
 
 (defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
-  (let ((input NIL) (print NIL) (impls ()) (with-rc T))
+  (let ((input NIL) (print NIL) (disassemble NIL) (impls ()) (with-rc T))
     (loop for arg = (pop args)
           while arg
           do (cond ((starts-with "-" arg)
@@ -407,6 +422,8 @@ cl-all (implementation | option | snippet)*
                        (setf input (format NIL "~@[~a~%~]~a" input (pop args))))
                       (("-n" "--no-rc")
                        (setf with-rc NIL))
+                      (("-d" "--disassemble")
+                       (setf disassemble T))
                       (("--")
                        (setf input (format NIL "~@[~a ~]~{~a~^ ~}" input args))
                        (setf args ()))
@@ -423,13 +440,14 @@ cl-all (implementation | option | snippet)*
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
     (loop with input = (create-input-file :input (or input *standard-input*)
-                                          :print print)
+                                          :print print
+                                          :disassemble disassemble)
           for impl in (or (nreverse impls) (available-lisp-implementations))
           do (format T "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~vt" 33 0 1 (name impl) 0
                      (if (interactive-stream-p *standard-output*) 34 16))
              (force-output)
              (handler-case
-                 (if print
+                 (if (or print disassemble)
                      (let ((str (with-output-to-string (*run-output*)
                                   (eval-in-lisp impl input :with-rc with-rc))))
                        (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
