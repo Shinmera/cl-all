@@ -21,6 +21,11 @@ exec sbcl \
    #:available-lisp-implementations
    #:run-lisp
    #:eval-in-lisp
+   #:run
+   #:implementation
+   #:output
+   #:status
+   #:done-p
    #:abcl
    #:allegro
    #:ccl
@@ -35,7 +40,7 @@ exec sbcl \
    #:toplevel))
 (in-package #:cl-all)
 
-(defvar *run-output* *standard-output*)
+(defvar *ansi* NIL)
 
 (defun starts-with (prefix string)
   (and (<= (length prefix) (length string))
@@ -64,8 +69,12 @@ exec sbcl \
       (nreverse parts))))
 
 (defun temp-file ()
-  #+windows (merge-pathnames "AppData/Local/Temp/" (user-homedir-pathname))
-  #-windows #p"/tmp/cl-all.lisp")
+  (make-pathname
+   :name (format NIL "cl-all-~d-~4,'0x" (get-universal-time) (random #xFFFF))
+   :type "lisp"
+   :defaults
+   #+windows (merge-pathnames "AppData/Local/Temp/" (user-homedir-pathname))
+   #-windows #p"/tmp/"))
 
 (defun copy-stream-to-stream (input output)
   (let ((buffer (make-string 4096)))
@@ -94,10 +103,11 @@ exec sbcl \
         (format output "~&(cl:defun cl-user::cl-all-thunk ()~%")
         (copy-stream-to-stream input output)
         (format output ")~%")
-        (when print
-          (format output "~&(cl:format cl:t \"~~a\" (cl-user::cl-all-thunk))~%"))
         (when disassemble
           (format output "~&(cl:disassemble (cl:compile 'cl-user::cl-all-thunk))~%"))
+        (if print
+            (format output "~&(cl:format cl:*standard-output* \"~~a\" (cl-user::cl-all-thunk))~%")
+            (format output "~&(cl-user::cl-all-thunk)~%"))
         output)))))
 
 (defun executable-paths (&optional (pathvar "PATH"))
@@ -145,15 +155,9 @@ exec sbcl \
         (find-single name))
     NIL))
 
-(defun run (executable &rest args)
-  (sb-ext:run-program executable (remove NIL args)
-                      :input NIL
-                      :output *run-output*
-                      :error *run-output*))
-
 (defun cl-user::ansi (stream code &rest arg)
   (declare (ignore arg))
-  (when (interactive-stream-p stream)
+  (when *ansi*
     (format stream "~c[~dm" #\escape code)))
 
 (defclass implementation ()
@@ -203,8 +207,44 @@ exec sbcl \
     (setf *available-lisp-implementations* (remove-if-not #'local-executable (lisp-implementations))))
   *available-lisp-implementations*)
 
+(defclass run ()
+  ((implementation :initarg :implementation :accessor implementation)
+   (arguments :initarg :arguments :initform () :accessor arguments)
+   (output-stream :initform (make-string-output-stream) :accessor output-stream)
+   (process :initform NIL :accessor process)))
+
+(defmethod initialize-instance :after ((run run) &key)
+  (setf (process run) (sb-ext:run-program (local-executable (implementation run))
+                                          (remove NIL (arguments run))
+                                          :input NIL
+                                          :wait NIL
+                                          :output (output-stream run)
+                                          :error :output)))
+
+(defmethod print-object ((run run) stream)
+  (print-unreadable-object (run stream :type T :identity T)
+    (format stream "~a ~a"
+            (name (implementation run))
+            (status run))))
+
+(defmethod status ((run run))
+  (cond ((null (process run)) :PENDING)
+        ((sb-ext:process-alive-p (process run)) :RUNNING)
+        ((= 0 (sb-ext:process-exit-code (process run))) :DONE)
+        (T :FAILED)))
+
+(defmethod done-p ((run run))
+  (member (status run) '(:failed :done)))
+
+(defmethod output ((run run))
+  (get-output-stream-string (output-stream run)))
+
+(defmethod wait-until-done ((run run))
+  (sb-ext:process-wait (process run) T)
+  run)
+
 (defmethod run-lisp ((lisp implementation) &rest args)
-  (apply #'run (local-executable lisp) args))
+  (make-instance 'run :implementation lisp :arguments args))
 
 (defmethod run-lisp (lisp &rest args)
   (apply #'run-lisp (ensure-lisp lisp) args))
@@ -234,17 +274,18 @@ exec sbcl \
   (apply #'eval-in-lisp lisp (create-input-file :input stream) args))
 
 (defmethod eval-wrapper (lisp file &optional destination)
-  (format destination "(flet ((finish () ~
-                        (finish-output *standard-output*) ~
-                        (finish-output *error-output*))) ~
-                 (handler-case ~
-                     (progn (load ~s :verbose NIL :print NIL) ~
-                       (finish) ~
-                       ~a) ~
-                   (error (e) ~
-                    (format *error-output* \"~&~%ERROR: ~~a\" e) ~
-                    (finish)
-                    ~a)))"
+  (format destination "~
+(cl:flet ((#1=finish () ~
+            (cl:finish-output cl:*standard-output*) ~
+            (cl:finish-output cl:*error-output*))) ~
+  (cl:handler-case ~
+      (cl:progn (cl:load ~s :verbose cl:nil :print cl:nil) ~
+        (#1#) ~
+        ~a) ~
+    (cl:error (e) ~
+     (cl:format cl:*error-output* \"~~&~~%ERROR: ~~a\" e) ~
+     (#1#) ~
+     ~a)))"
           (namestring file) (quit-form lisp 0) (quit-form lisp 1)))
 
 (defclass abcl (implementation) ())
@@ -340,15 +381,10 @@ exec sbcl \
   (format NIL "(#j:process:exit ~d)" code))
 
 (defmethod eval-in-lisp ((lisp jscl) (file pathname) &key)
-  (let ((tmp (make-pathname :name "cl-all-tmp" :type "lisp" :defaults
-                            #+(or windows win32) #p"C:/Temp/"
-                            #-(or windows win32) #p"/tmp/")))
-    (unwind-protect
-         (progn
-           (with-open-file (stream tmp :direction :output :if-exists :supersede)
-             (eval-wrapper lisp file stream))
-           (run-lisp lisp (namestring tmp)))
-      (delete-file tmp))))
+  (let ((tmp (temp-file)))
+    (with-open-file (stream tmp :direction :output :if-exists :supersede)
+      (eval-wrapper lisp file stream))
+    (run-lisp lisp (namestring tmp))))
 
 (defclass mkcl (implementation) ())
 
@@ -384,23 +420,27 @@ cl-all (implementation | option | snippet)*
     are used. See -l for a list of available implementations.
   
   option:
-    --print -p         Causes the last form's value to be printed.
+    -a --ansi          Use ANSI escape codes to mark up the output.
+
+    -d --disassemble   Compiles and prints the disassembly of the
+                       expressions.
+
+    -e --eval          Evaluates the given expression.
+
+    -f --file          Uses the given file as input.
+
+    -h --help          Show this usage prompt and exit.
+
+    -l --lisps         List all known and available implementations
+                       and exit.
+
+    -n --no-rc         Do not run implementation init files.
+
+    -p --print         Causes the last form's value to be printed.
                        Will also trim extraneous whitespace from the
                        output.
 
-    --file  -f         Uses the given file as input.
-
-    --eval  -e         Evaluates the given expression.
-
-    --disassemble -d   Compiles and prints the disassembly of the
-                       expressions.
-
-    --no-rc -n         Do not run implementation init files.
-
-    --lisps -l         List all known and available implementations
-                       and exit.
-
-    --help  -h         Show this usage prompt and exit.
+    -x --parallel      Run the implementations in parallel.
 
     --                 All further arguments are used as tokens to be
                        evaluated, concatenated by spaces.
@@ -411,33 +451,50 @@ cl-all (implementation | option | snippet)*
   If no snippet, file, or eval option is given, the standard input is
   used to read forms from. Forms are read until EOF is encountered~%")
 
-(defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
-  (let ((input NIL) (print NIL) (disassemble NIL) (impls ()) (with-rc T))
+(defun parse-args (args)
+  (let ((input NIL) (print NIL) (disassemble NIL) (impls ()) (with-rc T) (parallel NIL))
     (loop for arg = (pop args)
           while arg
-          do (cond ((starts-with "-" arg)
+          do (cond ((starts-with "--" arg)
                     (case* string= arg
-                      (("-p" "--print")
+                      ("--ansi"
+                       (setf *ansi* T))
+                      ("--print"
                        (setf print T))
-                      (("-f" "--file")
+                      ("--file"
                        (setf input (parse-namestring (pop args))))
-                      (("-e" "--eval")
+                      ("--eval"
                        (setf input (format NIL "~@[~a~%~]~a" input (pop args))))
-                      (("-n" "--no-rc")
+                      ("--no-rc"
                        (setf with-rc NIL))
-                      (("-d" "--disassemble")
+                      ("--disassemble"
                        (setf disassemble T))
-                      (("--")
+                      ("--parallel"
+                       (setf parallel T))
+                      ("--"
                        (setf input (format NIL "~@[~a ~]~{~a~^ ~}" input args))
                        (setf args ()))
-                      (("-h" "--help")
+                      ("--help"
                        (format *error-output* *help-string*)
-                       (return-from toplevel))
-                      (("-l" "--lisps")
+                       (sb-ext:exit))
+                      ("--lisps"
                        (format *error-output* "~{~(~a~)~^ ~}~%" (available-lisp-implementations))
-                       (return-from toplevel))
+                       (sb-ext:exit))
                       (T
                        (format *error-output* "~&Unknown argument ~s: Ignoring." arg))))
+                   ((starts-with "-" arg)
+                    (loop for i from 1 below (length arg)
+                          do (case (char arg i)
+                               (#\a (setf *ansi* T))
+                               (#\p (setf print T))
+                               (#\f (setf input (parse-namestring (pop args))))
+                               (#\e (setf input (format NIL "~@[~a~%~]~a" input (pop args))))
+                               (#\n (setf with-rc NIL))
+                               (#\d (setf disassemble T))
+                               (#\x (setf parallel T))
+                               (#\h (format *error-output* *help-string*) (sb-ext:exit))
+                               (#\l (format *error-output* "~{~(~a~)~^ ~}~%" (available-lisp-implementations)) (sb-ext:exit))
+                               (T (format *error-output* "~&Unknown argument ~s: Ignoring." arg)))))
                    ((find arg (lisp-implementations) :test #'string-equal)
                     (let ((impl (find arg (lisp-implementations) :test #'string-equal)))
                       (unless (local-executable impl)
@@ -445,22 +502,52 @@ cl-all (implementation | option | snippet)*
                       (push impl impls)))
                    (T
                     (setf input (format NIL "~@[~a ~]~a" input arg)))))
-    (loop with input = (create-input-file :input (or input *standard-input*)
-                                          :print print
-                                          :disassemble disassemble)
-          for impl in (or (nreverse impls) (available-lisp-implementations))
-          do (format T "~& ~/ansi/-->~/ansi/ ~/ansi/~a~/ansi/: ~vt" 33 0 1 (name impl) 0
-                     (if (interactive-stream-p *standard-output*) 34 16))
-             (force-output)
-             (handler-case
-                 (if (or print disassemble)
-                     (let ((str (with-output-to-string (*run-output*)
-                                  (eval-in-lisp impl input :with-rc with-rc))))
-                       (when (and disassemble (not print))
-                         (terpri))
-                       (write-string (string-trim '(#\Linefeed #\Return #\Space #\Tab) str)))
-                     (eval-in-lisp impl input :with-rc with-rc))
-               (error (e)
-                 (format T "~& ~/ansi/[ERR]~/ansi/ ~vt~a" 31 0
-                         (if (interactive-stream-p *standard-output*) 34 16) e))))
-    (fresh-line)))
+    (values (create-input-file :input (or input *standard-input*)
+                               :print print
+                               :disassemble disassemble)
+            (or (nreverse impls) (available-lisp-implementations))
+            parallel with-rc print disassemble)))
+
+(defun output-run (run print disassemble)
+  (let ((out (output run)))
+    (ecase (status run)
+      ((:pending :running))
+      (:done
+       (when (or print disassemble)
+         (when (and disassemble (not print))
+           (terpri))
+         (format T "~&~/ansi/~a~/ansi/: ~vt~a~%"
+                 1 (name (implementation run)) 0
+                 (if (interactive-stream-p *standard-output*) 34 16)
+                 (string-trim '(#\Linefeed #\Return #\Space #\Tab) out))))
+      (:failed
+       (format T "~&~/ansi/~a~/ansi/: ~/ansi/[FAILED]~/ansi/ ~vt~a~%"
+               1 (name (implementation run)) 0 31 0
+               (if (interactive-stream-p *standard-output*) 34 16)
+               (string-trim '(#\Linefeed #\Return #\Space #\Tab) out))))))
+
+(defun toplevel (&optional (args (rest sb-ext:*posix-argv*)))
+  (handler-case
+      (multiple-value-bind (input impls parallel with-rc print disassemble) (parse-args args)
+        (unwind-protect
+             (if parallel
+                 (let ((runs (loop for impl in impls
+                                   collect (eval-in-lisp impl input :with-rc with-rc))))
+                   (loop while runs
+                         do (loop for run in runs
+                                  do (when (done-p run)
+                                       (wait-until-done run)
+                                       (output-run run print disassemble)
+                                       (setf runs (remove run runs))
+                                       (return))
+                                  finally (sleep 0.01))))
+                 (loop for impl in impls
+                       for run = (eval-in-lisp impl input :with-rc with-rc)
+                       do (wait-until-done run)
+                          (output-run run print disassemble)))
+          (when (probe-file input)
+            (delete-file input)))
+        (fresh-line))
+    (sb-sys:interactive-interrupt ()
+      (format *error-output* "~&Interrupted~%")
+      (sb-ext:exit :code 1 :abort T))))
