@@ -4,7 +4,7 @@
   :author "Yukari Hafner <shinmera@tymoon.eu>"
   :maintainer "Yukari Hafner <shinmera@tymoon.eu>"
   :description "A script to evaluate expressions in multiple lisp implementations."
-  :homepage "https://github.com/Shinmera/cl-all"
+  :homepage "https://shinmera.com/project/cl-all"
   :serial T
   :components ((:file "cl-all"))
   :depends-on ((:feature :sbcl (:require :sb-posix)))
